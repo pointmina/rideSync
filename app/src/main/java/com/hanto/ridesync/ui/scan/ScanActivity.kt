@@ -9,13 +9,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.hanto.ridesync.R
+import com.hanto.ridesync.ble.client.ConnectionState
 import com.hanto.ridesync.databinding.ActivityScanBinding
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -35,26 +34,18 @@ class ScanActivity : AppCompatActivity() {
         if (allGranted) {
             viewModel.startScan()
         } else {
-            Toast.makeText(this, "BLE permissions are required to scan devices", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "BLE permissions are required to scan devices", Toast.LENGTH_SHORT)
+                .show()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. Edge-to-Edge 활성화 (가장 먼저 호출)
         enableEdgeToEdge()
 
-        // 2. ViewBinding 초기화
         binding = ActivityScanBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        // 3. 시스템 바(상태바/네비바) 인셋 적용
-        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            insets
-        }
 
         setupRecyclerView()
         setupListeners()
@@ -62,9 +53,9 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclerView() {
-        deviceAdapter = DeviceAdapter { device ->
-            Toast.makeText(this, "Selected: ${device.name}", Toast.LENGTH_SHORT).show()
-            // 추후 연결 로직 구현
+        deviceAdapter = DeviceAdapter { scannedDevice ->
+            Toast.makeText(this, "Selected: ${scannedDevice.name}", Toast.LENGTH_SHORT).show()
+            viewModel.connectToDevice(scannedDevice)
         }
         binding.rvDevices.apply {
             adapter = deviceAdapter
@@ -79,18 +70,56 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun observeViewModel() {
+
+        // 1. 스캔 상태 관찰
         lifecycleScope.launch {
             viewModel.scanState.collect { state ->
                 when (state) {
                     is ScanUiState.Idle -> {
                         binding.progressBar.isVisible = false
                     }
+
                     is ScanUiState.Scanning -> {
                         binding.progressBar.isVisible = true
                         deviceAdapter.submitList(state.devices)
                     }
+
                     is ScanUiState.Error -> {
                         binding.progressBar.isVisible = false
+                        Toast.makeText(this@ScanActivity, state.message, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+
+        // 2. 연결 상태 관찰 (신규 추가)
+        lifecycleScope.launch {
+            viewModel.connectionState.collect { state ->
+                when (state) {
+                    is ConnectionState.Connected -> {
+                        // [Fix] 권한 체크 후 안전하게 이름 가져오기
+                        val deviceName = if (ActivityCompat.checkSelfPermission(
+                                this@ScanActivity,
+                                Manifest.permission.BLUETOOTH_CONNECT
+                            ) == PackageManager.PERMISSION_GRANTED
+                        ) {
+                            state.device.name ?: "Unknown Device"
+                        } else {
+                            "Unknown Device"
+                        }
+
+                        Toast.makeText(
+                            this@ScanActivity,
+                            "Connected to $deviceName",
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        // [Navigation] 대시보드 화면으로 이동
+//                        navigateToDashboard(state.device.address, deviceName)
+                    }
+                    is ConnectionState.Disconnected -> { /* 처리 로직 */ }
+                    is ConnectionState.Connecting -> { /* 로딩 로직 */ }
+                    is ConnectionState.Error -> {
                         Toast.makeText(this@ScanActivity, state.message, Toast.LENGTH_LONG).show()
                     }
                 }
