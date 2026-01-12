@@ -32,7 +32,7 @@ class BleClientManager @Inject constructor(
                     _connectionState.value = ConnectionState.Connected(gatt.device)
 
                     // [중요] 연결 후 반드시 서비스 발견(Discover Services)을 해야 데이터를 읽고 쓸 수 있음
-                    // 약간의 딜레이를 주는 것이 안정성에 도움이 됨 (세나 노하우)
+                    // 약간의 딜레이를 주는 것이 안정성에 도움이 됨
                     gatt.discoverServices()
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.d("BleClient", "Successfully disconnected from $deviceAddress")

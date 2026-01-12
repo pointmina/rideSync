@@ -1,6 +1,7 @@
 package com.hanto.ridesync.ui.scan
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -16,6 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.hanto.ridesync.ble.client.ConnectionState
 import com.hanto.ridesync.databinding.ActivityScanBinding
+import com.hanto.ridesync.ui.dashboard.DashboardActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -114,8 +116,8 @@ class ScanActivity : AppCompatActivity() {
                             Toast.LENGTH_SHORT
                         ).show()
 
-                        // [Navigation] 대시보드 화면으로 이동
-//                        navigateToDashboard(state.device.address, deviceName)
+                        // 대시보드 화면으로 이동
+                        navigateToDashboard(state.device.address, deviceName)
                     }
                     is ConnectionState.Disconnected -> { /* 처리 로직 */ }
                     is ConnectionState.Connecting -> { /* 로딩 로직 */ }
@@ -125,6 +127,15 @@ class ScanActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun navigateToDashboard(deviceAddress: String, deviceName: String) {
+        val intent = Intent(this, DashboardActivity::class.java).apply {
+            // 다음 화면에서 사용할 기기 정보를 넘겨줍니다.
+            putExtra("DEVICE_ADDRESS", deviceAddress)
+            putExtra("DEVICE_NAME", deviceName)
+        }
+        startActivity(intent)
     }
 
     private fun checkPermissionsAndScan() {
