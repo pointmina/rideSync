@@ -1,7 +1,12 @@
 package com.hanto.ridesync.ble.client
 
 import android.annotation.SuppressLint
-import android.bluetooth.*
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -14,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,6 +27,13 @@ import javax.inject.Singleton
 class BleClientManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+
+    companion object {
+        private val BATTERY_SERVICE_UUID = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
+        private val BATTERY_LEVEL_CHAR_UUID =
+            UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
+    }
+
     private var bluetoothGatt: BluetoothGatt? = null
     private var lastConnectedDevice: BluetoothDevice? = null
     private var isUserInitiatedDisconnect = false // 사용자 의도 확인 플래그
@@ -32,26 +45,57 @@ class BleClientManager @Inject constructor(
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
+    private val _batteryLevel = MutableStateFlow<Int?>(null)
+    val batteryLevel: StateFlow<Int?> = _batteryLevel.asStateFlow()
+
     private val gattCallback = object : BluetoothGattCallback() {
+
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 isUserInitiatedDisconnect = false
-                reconnectJob?.cancel() // 연결 성공 시 재연결 작업 중단
+                reconnectJob?.cancel()
                 lastConnectedDevice = gatt.device
                 _connectionState.value = ConnectionState.Connected(gatt.device)
-                gatt.discoverServices()
-            }
-            else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                gatt.discoverServices() // 서비스 발견 시작
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 _connectionState.value = ConnectionState.Disconnected
-
-                // [핵심] 사용자가 직접 끊은 게 아니라면 재연결 시도
                 if (!isUserInitiatedDisconnect) {
-                    Log.d("BleClient", "Unexpected disconnection. Attempting to reconnect...")
                     startReconnectionProcess()
                 } else {
                     close()
                 }
+            }
+        }
+
+        // 서비스 발견 완료 시 호출
+        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Log.d("BleClient", "Services Discovered. Reading Battery...")
+                readBatteryLevel() // 연결 성공 및 서비스 발견 후 배터리 읽기 시작
+            }
+        }
+
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int
+        ) {
+            if (status == BluetoothGatt.GATT_SUCCESS && characteristic.uuid == BATTERY_LEVEL_CHAR_UUID) {
+                val level = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0)
+                _batteryLevel.value = level
+                Log.d("BleClient", "Battery Level Read: $level%")
+            }
+        }
+
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic
+        ) {
+            if (characteristic.uuid == BATTERY_LEVEL_CHAR_UUID) {
+                val level = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0)
+                _batteryLevel.value = level
+                Log.d("BleClient", "Battery Level Changed: $level%")
             }
         }
     }
@@ -102,5 +146,27 @@ class BleClientManager @Inject constructor(
     private fun close() {
         bluetoothGatt?.close()
         bluetoothGatt = null
+    }
+
+    @SuppressLint("MissingPermission")
+    fun readBatteryLevel() {
+        val gatt = bluetoothGatt ?: return
+        val service = gatt.getService(BATTERY_SERVICE_UUID)
+        val characteristic = service?.getCharacteristic(BATTERY_LEVEL_CHAR_UUID)
+
+        if (characteristic != null) {
+            // 1. 즉시 한 번 읽기
+            gatt.readCharacteristic(characteristic)
+
+            // 2. 값이 변할 때마다 알려달라고 설정
+            gatt.setCharacteristicNotification(characteristic, true)
+
+            // CCCD 설정
+            val descriptor = characteristic.getDescriptor(
+                UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+            )
+            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            gatt.writeDescriptor(descriptor)
+        }
     }
 }
