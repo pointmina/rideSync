@@ -97,7 +97,7 @@ class ScanActivity : AppCompatActivity() {
             viewModel.connectionState.collect { state ->
                 when (state) {
                     is ConnectionState.Connected -> {
-                        // [Fix] 권한 체크 후 안전하게 이름 가져오기
+                        // 권한 체크 후 안전하게 이름 가져오기
                         val deviceName = if (ActivityCompat.checkSelfPermission(
                                 this@ScanActivity,
                                 Manifest.permission.BLUETOOTH_CONNECT

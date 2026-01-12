@@ -7,6 +7,7 @@ import com.hanto.ridesync.ble.scanner.ScannedDevice
 import com.hanto.ridesync.common.Resource
 import com.hanto.ridesync.data.repository.BleRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,12 +31,13 @@ class ScanViewModel @Inject constructor(
     val connectionState: StateFlow<ConnectionState> = repository.connectionState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConnectionState.Disconnected)
 
+    private var scanJob: Job? = null
 
     fun startScan() {
         _scanState.value = ScanUiState.Scanning(emptyList())
         deviceMap.clear()
 
-        viewModelScope.launch {
+        scanJob = viewModelScope.launch {
             repository.scanDevices().collect { resource ->
                 when (resource) {
                     is Resource.Success -> {
@@ -71,9 +73,9 @@ class ScanViewModel @Inject constructor(
     }
 
     private fun stopScan() {
-        // 현재 구조상 Flow 구독을 취소하거나, Repository에 stopScan 메소드를 만들어 호출
-        // 여기서는 간단히 UI 상태를 Idle로 돌려 스캔 화면을 정리하는 시늉만 냅니다.
-        // 실제로는 Job을 취소해야 함.
+        scanJob?.cancel()
+        scanJob = null
+        _scanState.value = ScanUiState.Idle
     }
 }
 
