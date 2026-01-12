@@ -87,8 +87,6 @@ class DashboardActivity : AppCompatActivity() {
             if (status == TextToSpeech.SUCCESS) {
                 tts.language = Locale.US
 
-                // [고급] TTS가 끝났는지 감지하는 리스너
-                // 말이 끝나면 오디오 포커스를 반납(Abandon)해야 음악이 다시 커짐
                 tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
 
@@ -133,7 +131,7 @@ class DashboardActivity : AppCompatActivity() {
     private val focusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS -> {
-                // 영구적으로 포커스를 잃음 (예: 전화 옴) -> 필요시 로직 추가
+                // 영구적으로 포커스를 잃음 (예: 전화 옴)
             }
 
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
@@ -198,7 +196,6 @@ class DashboardActivity : AppCompatActivity() {
         val result: Int
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // [API 26 이상] 저장해둔 AudioFocusRequest 객체로 반납
             result = focusRequest?.let {
                 audioManager.abandonAudioFocusRequest(it)
             } ?: AudioManager.AUDIOFOCUS_REQUEST_FAILED
