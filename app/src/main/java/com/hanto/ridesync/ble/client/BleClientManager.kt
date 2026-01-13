@@ -1,5 +1,6 @@
 package com.hanto.ridesync.ble.client
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -9,6 +10,7 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +21,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.Queue
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -48,6 +52,13 @@ class BleClientManager @Inject constructor(
     private val _batteryLevel = MutableStateFlow<Int?>(null)
     val batteryLevel: StateFlow<Int?> = _batteryLevel.asStateFlow()
 
+    // 명령을 쌓아둘 큐
+    private val commandQueue: Queue<BleCommand> = ConcurrentLinkedQueue()
+
+    // 현재 명령이 수행 중인지 확인하는 플래그
+    @Volatile
+    private var isBusy = false
+
     private val gattCallback = object : BluetoothGattCallback() {
 
         @SuppressLint("MissingPermission")
@@ -72,10 +83,11 @@ class BleClientManager @Inject constructor(
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.d("BleClient", "Services Discovered. Reading Battery...")
-                readBatteryLevel() // 연결 성공 및 서비스 발견 후 배터리 읽기 시작
+                // TODO 추후 개발 예정.
             }
         }
 
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onCharacteristicRead(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
@@ -86,6 +98,33 @@ class BleClientManager @Inject constructor(
                 _batteryLevel.value = level
                 Log.d("BleClient", "Battery Level Read: $level%")
             }
+
+            isBusy = false
+            processNextCommand()
+        }
+
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int
+        ) {
+            super.onCharacteristicWrite(gatt, characteristic, status)
+
+            isBusy = false
+            processNextCommand()
+        }
+
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+        override fun onDescriptorWrite(
+            gatt: BluetoothGatt,
+            descriptor: BluetoothGattDescriptor,
+            status: Int
+        ) {
+            super.onDescriptorWrite(gatt, descriptor, status)
+
+            isBusy = false
+            processNextCommand()
         }
 
         override fun onCharacteristicChanged(
@@ -148,25 +187,55 @@ class BleClientManager @Inject constructor(
         bluetoothGatt = null
     }
 
-    @SuppressLint("MissingPermission")
-    fun readBatteryLevel() {
-        val gatt = bluetoothGatt ?: return
-        val service = gatt.getService(BATTERY_SERVICE_UUID)
-        val characteristic = service?.getCharacteristic(BATTERY_LEVEL_CHAR_UUID)
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    private fun enqueueCommand(command: BleCommand) {
+        commandQueue.add(command)
+        processNextCommand()
+    }
 
-        if (characteristic != null) {
-            // 1. 즉시 한 번 읽기
-            gatt.readCharacteristic(characteristic)
+    // 큐에서 다음 명령을 꺼내서 실행
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    @Synchronized
+    private fun processNextCommand() {
+        if (isBusy) {
+            Log.d("BleClientManager", "Busy state, waiting for callback...")
+            return
+        }
 
-            // 2. 값이 변할 때마다 알려달라고 설정
-            gatt.setCharacteristicNotification(characteristic, true)
+        val command = commandQueue.poll() ?: return // 큐가 비었으면 종료
+        val gatt = bluetoothGatt ?: run {
+            Log.e("BleClientManager", "Gatt is null")
+            commandQueue.clear()
+            return
+        }
 
-            // CCCD 설정
-            val descriptor = characteristic.getDescriptor(
-                UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-            )
-            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            gatt.writeDescriptor(descriptor)
+        isBusy = true // 실행 시작
+
+        val result = when (command) {
+            is BleCommand.Read -> {
+                Log.d("BleClientManager", "Processing Read: ${command.characteristic.uuid}")
+                gatt.readCharacteristic(command.characteristic)
+            }
+
+            is BleCommand.Write -> {
+                Log.d("BleClientManager", "Processing Write: ${command.characteristic.uuid}")
+                command.characteristic.value = command.data
+                command.characteristic.writeType = command.writeType
+                gatt.writeCharacteristic(command.characteristic)
+            }
+
+            is BleCommand.WriteDescriptor -> {
+                Log.d("BleClientManager", "Processing WriteDescriptor: ${command.descriptor.uuid}")
+                command.descriptor.value = command.data
+                gatt.writeDescriptor(command.descriptor)
+            }
+        }
+
+        // 명령 실행 자체를 실패했을 경우 (거의 없지만 방어 코드)
+        if (!result) {
+            Log.e("BleClientManager", "Command execution failed internally")
+            isBusy = false
+            processNextCommand() // 다음 명령 시도
         }
     }
 }
