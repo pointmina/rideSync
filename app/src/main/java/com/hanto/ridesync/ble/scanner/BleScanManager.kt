@@ -11,10 +11,13 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import javax.inject.Inject
+import android.os.ParcelUuid
+import com.hanto.ridesync.common.Constants
 
 class BleScanManager @Inject constructor(
     private val bluetoothAdapter: BluetoothAdapter?
 ) {
+
     /**
      * callbackFlow를 사용하여 콜백 지옥을 없애고,
      * 스트림(Stream) 형태로 스캔 결과를 지속적으로 방출합니다.
@@ -25,7 +28,7 @@ class BleScanManager @Inject constructor(
 
         if (scanner == null || !bluetoothAdapter.isEnabled) {
             trySend(Resource.Error("Bluetooth is disabled or not available"))
-            close() // 스트림 종료
+            close()
             return@callbackFlow
         }
 
@@ -35,7 +38,7 @@ class BleScanManager @Inject constructor(
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 super.onScanResult(callbackType, result)
 
-                // 이름이 없는 기기는 무시
+                // 이름이 없는 기기는 무시 (선택 사항)
                 val deviceName = result.device.name ?: return
 
                 val scannedDevice = ScannedDevice(
@@ -55,14 +58,15 @@ class BleScanManager @Inject constructor(
             }
         }
 
-        // 스캔 설정: Low Latency (빠른 검색)
-        // 라이딩 중에는 빠르게 연결해야 하므로 배터리를 좀 쓰더라도 Latency를 줄입니다.
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        // 필터: 필요 시 특정 UUID 필터링 추가 (여기선 전체 스캔)
-        val filters = listOf<ScanFilter>()
+        val filters = listOf(
+            ScanFilter.Builder()
+                .setServiceUuid(ParcelUuid.fromString(Constants.HANTO_SERVICE_UUID))
+                .build()
+        )
 
         // 스캔 시작
         try {
