@@ -181,8 +181,15 @@ class BleClientManager @Inject constructor(
         bluetoothGatt?.disconnect()
     }
 
-    @SuppressLint("MissingPermission")
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun close() {
+        //  1. 큐에 남아있는 명령 모두 폐기
+        commandQueue.clear()
+
+        // 2. 상태 초기화
+        isBusy = false
+
+        // 3. 자원 해제
         bluetoothGatt?.close()
         bluetoothGatt = null
     }
