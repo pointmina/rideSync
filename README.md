@@ -39,7 +39,7 @@ com.hanto.ridesync
 * **Issue**: 기기 스캔과 연결 시도가 동시에 발생할 때 라디오 자원 충돌로 인해 연결이 실패하는 현상 확인.
 * **Solution**: 연결 시도 직전 활성화된 스캔 작업을 강제 종료하고, 명시적인 리소스 해제)를 보장하는 라이프사이클 관리 로직 구현.
 
-### Seamless Audio UX (Ducking)
+### Audio UX (Ducking)
 
 * **Issue**: 단순 볼륨 조절 방식은 타 미디어 앱(유튜브, 티맵 등)과의 오디오 점유권 충돌 유발.
 * **Solution**: 안드로이드 표준 AudioFocusRequest를 준수하고, 인터컴 음성 성격에 맞는 USAGE_VOICE_COMMUNICATION 속성을 정의하여 시스템 레벨의 매끄러운 볼륨 감쇄 로직 완성.
