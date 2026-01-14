@@ -32,7 +32,7 @@ com.hanto.ridesync
 
 ---
 
-## 📖 Key Technical Challenges & Solutions
+## Key Technical Challenges & Solutions
 
 ### BLE Connection Stability (GATT 133 Error)
 
