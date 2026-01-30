@@ -202,14 +202,13 @@ class DashboardActivity : AppCompatActivity() {
                 audioManager.abandonAudioFocusRequest(it)
             } ?: AudioManager.AUDIOFOCUS_REQUEST_FAILED
         } else {
-            // [API 26 미만] 리스너 객체로 반납
             @Suppress("DEPRECATION")
             result = audioManager.abandonAudioFocus(focusChangeListener)
         }
 
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             runOnUiThread {
-                Toast.makeText(this, "Intercom Ended (Music Restore)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Music Restore", Toast.LENGTH_SHORT).show()
             }
         }
     }

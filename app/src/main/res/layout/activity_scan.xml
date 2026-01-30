@@ -12,7 +12,7 @@
         android:id="@+id/tv_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="RideSync Scanner"
+        android:text="Scanner"
         android:textColor="@android:color/black"
         android:textSize="24sp"
         android:textStyle="bold"
