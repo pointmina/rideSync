@@ -53,6 +53,45 @@ class ScanActivity : AppCompatActivity() {
         setupRecyclerView()
         setupListeners()
         observeViewModel()
+
+        checkPermissionsAndStartServiceOnly()
+    }
+
+    private fun checkPermissionsAndStartServiceOnly() {
+        // 1. Android 버전에 맞는 권한 목록 정의
+        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
+        } else {
+            arrayOf(
+                Manifest.permission.BLUETOOTH,
+                Manifest.permission.BLUETOOTH_ADMIN,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
+        }
+
+        // 2. 권한이 없는 게 있는지 확인
+        val neededPermissions = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (neededPermissions.isEmpty()) {
+            // [A] 모든 권한이 이미 있다면 -> 서비스 즉시 시작
+            startForegroundService()
+        } else {
+            // [B] 권한이 하나라도 없다면 -> 권한 요청 팝업 띄우기 (이 부분이 빠져 있었습니다!)
+            requestPermissionLauncher.launch(neededPermissions.toTypedArray())
+        }
     }
 
     private fun setupRecyclerView() {
