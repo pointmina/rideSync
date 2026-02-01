@@ -17,6 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.hanto.ridesync.ble.client.ConnectionState
 import com.hanto.ridesync.databinding.ActivityScanBinding
+import com.hanto.ridesync.service.RideSyncService
 import com.hanto.ridesync.ui.dashboard.DashboardActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -34,10 +35,10 @@ class ScanActivity : AppCompatActivity() {
     ) { permissions ->
         val allGranted = permissions.entries.all { it.value }
         if (allGranted) {
+            startForegroundService()
             viewModel.startScan()
         } else {
-            Toast.makeText(this, "BLE permissions are required to scan devices", Toast.LENGTH_SHORT)
-                .show()
+            Toast.makeText(this, "Permissions are required...", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -139,12 +140,19 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionsAndScan() {
-        // Android 12 (S) 이상 대응
-        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.ACCESS_FINE_LOCATION // 일부 기기 호환성 위해
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.ACCESS_FINE_LOCATION
             )
         } else {
             // Android 11 이하
@@ -163,7 +171,17 @@ class ScanActivity : AppCompatActivity() {
         if (neededPermissions.isNotEmpty()) {
             requestPermissionLauncher.launch(neededPermissions.toTypedArray())
         } else {
+            startForegroundService()
             viewModel.startScan()
+        }
+    }
+
+    private fun startForegroundService() {
+        val intent = Intent(this, RideSyncService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
         }
     }
 }
