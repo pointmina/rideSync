@@ -176,22 +176,25 @@ class BleClientManager @Inject constructor(
 
     @SuppressLint("MissingPermission")
     fun disconnect() {
-        isUserInitiatedDisconnect = true // 사용자가 직접 끊었음을 명시
+        isUserInitiatedDisconnect = true
         reconnectJob?.cancel()
-        bluetoothGatt?.disconnect()
-    }
 
+        // 이미 연결된 상태라면 disconnect() 호출 후 콜백을 기다림
+        if (bluetoothGatt != null && _connectionState.value is ConnectionState.Connected) {
+            bluetoothGatt?.disconnect()
+        } else {
+            // 연결이 안 된 상태라면 바로 리소스 정리
+            close()
+        }
+    }
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun close() {
-        //  1. 큐에 남아있는 명령 모두 폐기
+        Log.d("BleClient", "GATT 리소스 해제 (close)")
         commandQueue.clear()
-
-        // 2. 상태 초기화
         isBusy = false
-
-        // 3. 자원 해제
         bluetoothGatt?.close()
         bluetoothGatt = null
+        _connectionState.value = ConnectionState.Disconnected
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)

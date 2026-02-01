@@ -20,10 +20,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -97,19 +99,29 @@ class RideSyncService : Service() {
     }
 
     private fun startTaglessScan() {
+        // 이미 스캔 중이면 중복 실행 방지
         if (scanJob?.isActive == true) return
 
-        Log.d(TAG, "스캔 시작 (찾는 기기: Hanto)")
         scanJob = serviceScope.launch {
-            // [수정 완료] Hanto 기기를 찾습니다. RSSI -80보다 크면 3회 확인 후 연결!
-            bleScanManager.startTaglessScan("Hanto", thresholdRssi = -80)
-                .collect { resource ->
-                    if (resource is Resource.Success) {
-                        Log.d(TAG, "기기 발견! 자동 연결 시도: ${resource.data.name}")
-                        bleClientManager.connect(resource.data.device)
-                        stopTaglessScan()
-                    }
+            try {
+                withTimeout(30_000L) {
+                    bleScanManager.startTaglessScan("Hanto", thresholdRssi = -80)
+                        .collect { resource ->
+                            if (resource is Resource.Success) {
+                                Log.d(TAG, "기기 발견! 자동 연결 시도: ${resource.data.name}")
+                                bleClientManager.connect(resource.data.device)
+                            } else if (resource is Resource.Error) {
+                                Log.e(TAG, "스캔 중 에러: ${resource.message}")
+                            }
+                        }
                 }
+            } catch (e: TimeoutCancellationException) {
+                updateNotification("기기 탐색 실패 (대기 모드)")
+                stopTaglessScan()
+            } catch (e: Exception) {
+                Log.e(TAG, "스캔 중 알 수 없는 오류", e)
+                stopTaglessScan()
+            }
         }
     }
 
