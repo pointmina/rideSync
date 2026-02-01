@@ -29,8 +29,10 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class RideSyncService : Service() {
 
-    @Inject lateinit var bleScanManager: BleScanManager
-    @Inject lateinit var bleClientManager: BleClientManager
+    @Inject
+    lateinit var bleScanManager: BleScanManager
+    @Inject
+    lateinit var bleClientManager: BleClientManager
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var scanJob: Job? = null
@@ -49,6 +51,13 @@ class RideSyncService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, createNotification("태그리스 모드 대기 중..."))
+
+        // 기존에 연결이 안 되어 있다면 즉시 스캔 시작
+        if (bleClientManager.connectionState.value is ConnectionState.Disconnected) {
+            Log.d(TAG, "서비스 시작됨: 즉시 태그리스 스캔 시작")
+            startTaglessScan()
+        }
+
         return START_STICKY
     }
 
@@ -69,16 +78,19 @@ class RideSyncService : Service() {
                     updateNotification("연결 대기 중... (Tagless Scan)")
                     startTaglessScan()
                 }
+
                 is ConnectionState.Connecting -> {
                     updateNotification("연결 시도 중...")
                     stopTaglessScan()
                 }
+
                 is ConnectionState.Connected -> {
                     val name = state.device.name ?: "Unknown"
                     Log.d(TAG, "연결 성공: $name")
                     updateNotification("RideSync 연결됨: $name")
                     stopTaglessScan()
                 }
+
                 is ConnectionState.Error -> startTaglessScan()
             }
         }.launchIn(serviceScope)
@@ -125,7 +137,11 @@ class RideSyncService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "RideSync Service", NotificationManager.IMPORTANCE_LOW)
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "RideSync Service",
+                NotificationManager.IMPORTANCE_LOW
+            )
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }

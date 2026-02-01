@@ -8,17 +8,20 @@ import android.util.Log
 import com.hanto.ridesync.service.RideSyncService
 
 class BootReceiver : BroadcastReceiver() {
-
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            Log.d("BootReceiver", "시스템 부팅 감지! RideSync 서비스를 시작합니다.")
+            Log.d("BootReceiver", "부팅 완료 감지! 서비스 시작 시도.")
 
             val serviceIntent = Intent(context, RideSyncService::class.java)
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-            } else {
-                context.startService(serviceIntent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent)
+                } else {
+                    context.startService(serviceIntent)
+                }
+            } catch (e: Exception) {
+                Log.e("BootReceiver", "서비스 시작 실패: ${e.message}")
             }
         }
     }
